@@ -1,0 +1,30 @@
+{
+  "dxt_version": "0.1",
+  "name": "mcpr",
+  "version": "1.0.0",
+  "description": "MCP-compliant R code execution and management agent for Cloud Desktop Extension",
+  "author": {
+    "name": "Wanjun Gu",
+    "email": "wanjun.gu@ucsf.edu"
+  },
+  "icon": "logo.png",
+  "server": {
+    "type": "python",
+    "entry_point": "server/main.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--with", "mcp>=1.0.0",
+        "${__dirname}/server/main.py"
+      ],
+      "env": {
+      }
+    }
+  },
+  "keywords": [
+    "R",
+    "Statistical Programming"
+  ],
+  "license": "MIT"
+}

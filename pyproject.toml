@@ -1,0 +1,12 @@
+[project]
+name = "mcpr"
+version = "1.0.0"
+description = "MCP-compliant R code execution and management agent for Cloud Desktop Extension"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+mcpr = "server:main"
