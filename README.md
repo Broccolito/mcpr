@@ -1,7 +1,6 @@
-<div align="center">
 # mcpr
 
-# <img src="logo.png" align="right" width="150" alt="mcpr logo" style="margin-left: 20px;"/>
+<img src="logo.png" align="right" width="150" alt="mcpr logo" style="margin-left: 20px;"/>
 
 MCP-compliant R code execution and management agent for Claude Desktop Extension.
 
