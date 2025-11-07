@@ -1,20 +1,13 @@
 <div align="center">
+# mcpr
 
-# mcpr<img src="logo.png" align="right" width="150" alt="mcpr logo" style="margin-left: 20px;"/>
-
-
+# <img src="logo.png" align="right" width="150" alt="mcpr logo" style="margin-left: 20px;"/>
 
 MCP-compliant R code execution and management agent for Claude Desktop Extension.
-
-</div>
-
----
 
 ## Overview
 
 **mcpr** is an MCP (Model Context Protocol) server that allows Claude to generate, execute, and manage R scripts within a user-specified directory. It provides a complete workflow for statistical programming and data analysis through natural language interaction.
-
----
 
 ## Features
 
@@ -74,8 +67,6 @@ Verify installation:
 uv --version
 ```
 
----
-
 ## Installation
 
 ### Step 1: Download the Extension File
@@ -99,8 +90,6 @@ To avoid permission prompts for every tool execution:
 4. Find "mcpr" in the list of installed extensions
 5. Enable "Allow tools to run without permission" or "Auto-approve tool execution"
 6. Restart Claude Desktop for changes to take effect
-
----
 
 ## Usage
 
@@ -130,8 +119,6 @@ Once installed, you can interact with mcpr through natural language in Claude De
 > 
 > "Inspect the data objects from the last run"
 
----
-
 ## Technical Details
 
 - **Python Version:** Requires Python 3.10 or higher
@@ -139,8 +126,6 @@ Once installed, you can interact with mcpr through natural language in Claude De
 - **R Execution:** R scripts are executed using Rscript
 - **Session Persistence:** Session state is preserved in `.mcpr` directory within the working directory
 - **Security:** All file operations are sandboxed to the specified working directory
-
----
 
 ## Acknowledgments
 
@@ -152,14 +137,10 @@ Special thanks to:
 
 for their contributions to this project.
 
----
-
 ## Maintainer
 
 **Wanjun Gu**  
 Email: [wanjun.gu@ucsf.edu](mailto:wanjun.gu@ucsf.edu)
-
----
 
 ## License
 
