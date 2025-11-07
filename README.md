@@ -17,8 +17,6 @@ MCP-compliant R code execution and management agent for Claude Desktop Extension
 - **Automatic workspace saving** between sessions
 - **Safe path operations** sandboxed within designated working directories
 
----
-
 ## Prerequisites
 
 ### 1. Install R
@@ -36,7 +34,7 @@ If R is not already installed on your system:
 
 ### 2. Install Homebrew
 
-Homebrew is required to install uv. Check if Homebrew is already installed:
+[Homebrew](https://brew.sh/) is required to install uv. Check if Homebrew is already installed:
 
 ```bash
 brew --version
@@ -52,7 +50,7 @@ Follow the post-installation instructions to add Homebrew to your PATH.
 
 ### 3. Install uv
 
-uv is a fast Python package installer and runner. Install it using Homebrew:
+[uv](https://docs.astral.sh/uv/getting-started/installation/) is a fast Python package installer and runner. Install it using Homebrew:
 
 ```bash
 brew install uv
