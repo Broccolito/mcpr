@@ -179,18 +179,11 @@ You: Run everything and show the results
 
 ## Acknowledgments
 
-Special thanks to:
-
-- **Beniamin Krupkin**
-- **Sara Smith**
-- **Siddharth Mahesh**
-
-for their contributions.
+Special thanks to **Beniamin Krupkin** and **Sara Smith** for the inspiration of this idea and their valuable contributions.
 
 ## Maintainer
 
-**Wanjun Gu**
- 📧 [wanjun.gu@ucsf.edu](mailto:wanjun.gu@ucsf.edu)
+**Wanjun Gu** ([wanjun.gu@ucsf.edu](mailto:wanjun.gu@ucsf.edu))
 
 ## License
 
