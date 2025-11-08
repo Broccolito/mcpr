@@ -2,6 +2,10 @@
 
 MCP-compliant R code execution and management agent for Claude Desktop Extension.
 
+<img src="assets/poster.png" alt="MCPR" width="300" style="display:inline;">
+
+Empower R programming with Model Context Protocol.
+
 ## Overview
 
 **mcpr** is an MCP (Model Context Protocol) server that allows Claude to generate, execute, and manage R scripts within a user-specified directory. It provides a complete workflow for statistical programming and data analysis through natural language interaction.
