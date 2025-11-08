@@ -31,35 +31,72 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# R script scaffold template
-R_SCAFFOLD = """# mcpr: Primary R Script
-# Purpose: Add your analysis functions, data prep, and execution blocks here.
-# Style:
-# - Use "=" for assignment (not "<-").
-# - No space in control statements: if(cond){...}, for(i in xs){...}, while(ok){...}, function(x){...}
-# Notes:
-# - Keep functions small, documented, and testable.
-# - Use explicit library() calls in the "Packages" section.
-# - Write outputs (CSV/RDS/plots) into the working directory.
-
-# ---- Packages ----
-# library(readr)
-# library(dplyr)
+# R script scaffold template - now minimal, getting straight to business
+R_SCAFFOLD = """# ---- Packages ----
+library(ggplot2)
 
 # ---- Functions ----
-# example_function = function(x){
-#   # Add docs about inputs/outputs
-#   y = x * 2
-#   return(y)
-# }
 
 # ---- Main ----
-# Uncomment to run:
-# result = example_function(21)
-# write.csv(data.frame(result=result), "result.csv", row.names=FALSE)
 
-# ---- Session Info ----
-# print(sessionInfo())
+"""
+
+# ggplot Style Guide for reference
+GGPLOT_STYLE_GUIDE = """
+# ggplot Style Guide - One-Time Code Optimization
+
+## Core Principles:
+1. **Assignment**: Always use = instead of <- 
+2. **Theme**: Use theme_minimal() or theme_classic() with base_size=14
+3. **Colors**: Muted palettes (Set2 for categorical, viridis for continuous)
+4. **Dimensions**: Optimize for 5x4 inches (width x height)
+5. **Typography**: Base size ≥ 14pt for readability
+6. **Visibility**: Points ≥ 2.5, lines ≥ 0.8 width
+7. **Export**: Always save with dpi=800
+
+## Color Palette Guidelines:
+### Categorical Data:
+- Set2, Set3, Pastel1, Pastel2, Dark2 (RColorBrewer)
+- Avoid default ggplot2 colors
+
+### Continuous Data:
+- viridis, magma, plasma, inferno, cividis
+- Colorblind-friendly by default
+
+### Diverging Data:
+- RdBu, RdYlBu, Spectral, PuOr, BrBG
+- Center at meaningful value
+
+## Code Optimization Example:
+```r
+# Good practice - optimized code
+library(ggplot2)
+
+# Use = for assignments
+data = read.csv("data.csv")
+
+# Build plot with optimal settings
+p = ggplot(data, aes(x=x_var, y=y_var, color=group)) +
+  geom_point(size=2.5, alpha=0.8) +
+  geom_line(linewidth=0.8) +
+  scale_color_brewer(palette="Set2") +  # Muted categorical colors
+  theme_minimal(base_size=14) +
+  labs(x="Clear X Label",
+       y="Clear Y Label", 
+       title="Concise Title") +
+  theme(plot.margin=margin(10,10,10,10))
+
+# Save with optimal dimensions and quality
+ggsave("plot.png", p, width=5, height=4, dpi=800)
+```
+
+## Automatic Optimizations:
+- Replace theme_gray() → theme_minimal(base_size=14)
+- Convert <- to = throughout
+- Add color scales if missing (no defaults)
+- Optimize dimensions to 5x4 inches
+- Ensure dpi=800 for all exports
+- Humanize variable names in labels
 """
 
 class MCPRServer:
@@ -67,7 +104,7 @@ class MCPRServer:
         self.state_dir = None
         self.state_file = None
         self.workdir = None
-        self.primary_file = "agent.r"
+        self.primary_file = "agent.R"  # Changed from .r to .R
         
     def load_state(self) -> Dict[str, Any]:
         """Load state from JSON file"""
@@ -182,59 +219,63 @@ class MCPRServer:
             }
     
     def scan_directory_files(self) -> Dict[str, float]:
-        """Scan directory for files and their mtimes"""
+        """Scan directory for files with modification times"""
         files = {}
-        for item in self.workdir.iterdir():
-            if item.is_file() and not item.name.startswith('.'):
-                files[item.name] = item.stat().st_mtime
+        try:
+            for item in self.workdir.iterdir():
+                if item.is_file():
+                    files[item.name] = item.stat().st_mtime
+        except Exception:
+            pass
         return files
     
     async def handle_set_workdir(self, path: str, create: bool = True) -> Dict[str, Any]:
-        """Set working directory and initialize state"""
+        """Set working directory"""
         try:
-            workdir_path = Path(path).resolve()
+            workdir_path = Path(path).expanduser().resolve()
             
             if create and not workdir_path.exists():
                 workdir_path.mkdir(parents=True, exist_ok=True)
-                created = True
-            elif not workdir_path.exists():
+                logger.info(f"Created working directory: {workdir_path}")
+            
+            if not workdir_path.exists():
                 return {
                     "ok": False,
                     "error": {
                         "code": "DIR_NOT_FOUND",
                         "message": f"Directory {path} does not exist",
-                        "hints": ["Set create=true to create it", "Provide an existing directory path"]
+                        "hints": ["Set create=true to create the directory", "Check the path is correct"]
                     }
                 }
-            else:
-                created = False
             
+            if not workdir_path.is_dir():
+                return {
+                    "ok": False,
+                    "error": {
+                        "code": "NOT_A_DIRECTORY",
+                        "message": f"Path {path} is not a directory"
+                    }
+                }
+            
+            # Set state directory and file
             self.workdir = workdir_path
-            self.state_dir = self.workdir / ".mcpr"
+            self.state_dir = workdir_path / ".mcpr_state"
             self.state_dir.mkdir(exist_ok=True)
             self.state_file = self.state_dir / "state.json"
             
-            # Initialize state
-            state = {
-                "workdir": str(self.workdir),
-                "primary_file": "agent.r",
-                "last_run": None,
-                "exports_manifest": {}
-            }
+            # Update state
+            state = self.load_state()
+            state['workdir'] = str(workdir_path)
+            state['primary_file'] = self.primary_file
+            state['updated_at'] = datetime.now().isoformat()
             self.save_state(state)
-            self.primary_file = "agent.r"
             
-            # Create agent.r if it doesn't exist
-            agent_file = self.workdir / "agent.r"
-            if not agent_file.exists():
-                agent_file.write_text(R_SCAFFOLD)
-                logger.info(f"Created {agent_file}")
+            logger.info(f"Working directory set to: {workdir_path}")
             
             return {
                 "ok": True,
                 "data": {
-                    "workdir": str(self.workdir),
-                    "created": created,
+                    "workdir": str(workdir_path),
                     "primary_file": self.primary_file
                 }
             }
@@ -249,47 +290,43 @@ class MCPRServer:
     
     async def handle_get_state(self) -> Dict[str, Any]:
         """Get current state"""
-        if not self.workdir:
-            return {
-                "ok": True,
-                "data": {
-                    "state": {
-                        "workdir": None,
-                        "primary_file": None,
-                        "configured": False
-                    }
-                }
-            }
-        
         state = self.load_state()
-        state["configured"] = True
-        state["agent_r_exists"] = (self.workdir / "agent.r").exists()
-        state["primary_file_exists"] = (self.workdir / self.primary_file).exists() if self.primary_file else False
+        
+        # Add current runtime info
+        state['workdir_set'] = self.workdir is not None
+        if self.workdir:
+            state['workdir'] = str(self.workdir)
+            state['workdir_exists'] = self.workdir.exists()
+        
+        state['r_available'] = self.find_r_executable() is not None
+        state['primary_file'] = self.primary_file
         
         return {
             "ok": True,
-            "data": {
-                "state": state
-            }
+            "data": state
         }
     
     async def handle_create_r_file(self, filename: str, overwrite: bool = False, scaffold: bool = True) -> Dict[str, Any]:
-        """Create a new R file"""
+        """Create a new R script file"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
         
-        # Ensure .r extension
-        if not filename.endswith('.r'):
-            filename = filename + '.r'
+        # Ensure .R extension (capitalized)
+        if not filename.endswith('.R'):
+            if filename.endswith('.r'):
+                filename = filename[:-2] + '.R'
+            else:
+                filename = filename + '.R'
         
         file_path = self.workdir / filename
+        
         if not self.is_safe_path(file_path):
             return {
                 "ok": False,
                 "error": {
                     "code": "UNSAFE_PATH",
-                    "message": "File path escapes working directory"
+                    "message": f"File path {filename} is outside working directory"
                 }
             }
         
@@ -299,7 +336,7 @@ class MCPRServer:
                 "error": {
                     "code": "FILE_EXISTS",
                     "message": f"File {filename} already exists",
-                    "hints": ["Set overwrite=true to replace it", "Choose a different filename"]
+                    "hints": ["Set overwrite=true to replace the file", "Use a different filename"]
                 }
             }
         
@@ -307,10 +344,21 @@ class MCPRServer:
             content = R_SCAFFOLD if scaffold else ""
             file_path.write_text(content)
             
+            # Update state
+            state = self.load_state()
+            if 'r_files' not in state:
+                state['r_files'] = []
+            if filename not in state['r_files']:
+                state['r_files'].append(filename)
+            state['updated_at'] = datetime.now().isoformat()
+            self.save_state(state)
+            
             return {
                 "ok": True,
                 "data": {
-                    "file": filename
+                    "filename": filename,
+                    "path": str(file_path),
+                    "scaffold": scaffold
                 }
             }
         except Exception as e:
@@ -323,16 +371,17 @@ class MCPRServer:
             }
     
     async def handle_rename_r_file(self, old_name: str, new_name: str, overwrite: bool = False) -> Dict[str, Any]:
-        """Rename an R file"""
+        """Rename an R script file"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
         
-        # Ensure .r extension
-        if not old_name.endswith('.r'):
-            old_name = old_name + '.r'
-        if not new_name.endswith('.r'):
-            new_name = new_name + '.r'
+        # Ensure .R extension for new name
+        if not new_name.endswith('.R'):
+            if new_name.endswith('.r'):
+                new_name = new_name[:-2] + '.R'
+            else:
+                new_name = new_name + '.R'
         
         old_path = self.workdir / old_name
         new_path = self.workdir / new_name
@@ -342,7 +391,7 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "UNSAFE_PATH",
-                    "message": "File path escapes working directory"
+                    "message": "Path is outside working directory"
                 }
             }
         
@@ -351,7 +400,7 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "FILE_NOT_FOUND",
-                    "message": f"File {old_name} does not exist"
+                    "message": f"File {old_name} not found"
                 }
             }
         
@@ -361,7 +410,7 @@ class MCPRServer:
                 "error": {
                     "code": "FILE_EXISTS",
                     "message": f"File {new_name} already exists",
-                    "hints": ["Set overwrite=true to replace it", "Choose a different filename"]
+                    "hints": ["Set overwrite=true to replace the file", "Use a different filename"]
                 }
             }
         
@@ -370,21 +419,24 @@ class MCPRServer:
                 new_path.unlink()
             old_path.rename(new_path)
             
-            # Update primary_file if needed
-            primary_updated = False
+            # Update state
+            state = self.load_state()
+            if 'r_files' in state:
+                if old_name in state['r_files']:
+                    state['r_files'].remove(old_name)
+                if new_name not in state['r_files']:
+                    state['r_files'].append(new_name)
             if self.primary_file == old_name:
                 self.primary_file = new_name
-                state = self.load_state()
-                state["primary_file"] = new_name
-                self.save_state(state)
-                primary_updated = True
+                state['primary_file'] = new_name
+            state['updated_at'] = datetime.now().isoformat()
+            self.save_state(state)
             
             return {
                 "ok": True,
                 "data": {
                     "old_name": old_name,
-                    "new_name": new_name,
-                    "primary_file_updated": primary_updated
+                    "new_name": new_name
                 }
             }
         except Exception as e:
@@ -397,21 +449,26 @@ class MCPRServer:
             }
     
     async def handle_set_primary_file(self, filename: str) -> Dict[str, Any]:
-        """Set the primary R file"""
+        """Set primary R script file"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
         
-        if not filename.endswith('.r'):
-            filename = filename + '.r'
+        # Ensure .R extension
+        if not filename.endswith('.R'):
+            if filename.endswith('.r'):
+                filename = filename[:-2] + '.R'
+            else:
+                filename = filename + '.R'
         
         file_path = self.workdir / filename
+        
         if not self.is_safe_path(file_path):
             return {
                 "ok": False,
                 "error": {
                     "code": "UNSAFE_PATH",
-                    "message": "File path escapes working directory"
+                    "message": f"File path {filename} is outside working directory"
                 }
             }
         
@@ -420,13 +477,17 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "FILE_NOT_FOUND",
-                    "message": f"File {filename} does not exist"
+                    "message": f"File {filename} not found",
+                    "hints": ["Create the file first with create_r_file", "Check the filename is correct"]
                 }
             }
         
         self.primary_file = filename
+        
+        # Update state
         state = self.load_state()
-        state["primary_file"] = filename
+        state['primary_file'] = filename
+        state['updated_at'] = datetime.now().isoformat()
         self.save_state(state)
         
         return {
@@ -436,8 +497,8 @@ class MCPRServer:
             }
         }
     
-    async def handle_append_r_code(self, code: str, filename: str = None, ensure_trailing_newline: bool = True) -> Dict[str, Any]:
-        """Append code to an R file"""
+    async def handle_append_r_code(self, code: str, filename: Optional[str] = None, ensure_trailing_newline: bool = True) -> Dict[str, Any]:
+        """Append R code to file"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
@@ -445,16 +506,21 @@ class MCPRServer:
         if filename is None:
             filename = self.primary_file
         
-        if not filename.endswith('.r'):
-            filename = filename + '.r'
+        # Ensure .R extension
+        if not filename.endswith('.R'):
+            if filename.endswith('.r'):
+                filename = filename[:-2] + '.R'
+            else:
+                filename = filename + '.R'
         
         file_path = self.workdir / filename
+        
         if not self.is_safe_path(file_path):
             return {
                 "ok": False,
                 "error": {
                     "code": "UNSAFE_PATH",
-                    "message": "File path escapes working directory"
+                    "message": f"File path {filename} is outside working directory"
                 }
             }
         
@@ -463,28 +529,35 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "FILE_NOT_FOUND",
-                    "message": f"File {filename} does not exist",
-                    "hints": ["Create the file first with create_r_file"]
+                    "message": f"File {filename} not found",
+                    "hints": ["Create the file first with create_r_file", "Check the filename is correct"]
                 }
             }
         
         try:
-            # Read existing content to check for trailing newline
-            existing = file_path.read_text()
+            # Ensure code uses = instead of <- for assignments
+            if "<-" in code:
+                code = code.replace("<-", "=")
             
-            # Prepare content to append
-            if ensure_trailing_newline and existing and not existing.endswith('\n'):
-                code = '\n' + code
+            existing_content = file_path.read_text()
             
-            # Append
-            with open(file_path, 'a') as f:
-                bytes_written = f.write(code)
+            # Ensure proper spacing
+            if existing_content and not existing_content.endswith('\n'):
+                existing_content += '\n'
+            
+            # Ensure code ends with newline if requested
+            if ensure_trailing_newline and not code.endswith('\n'):
+                code += '\n'
+            
+            file_path.write_text(existing_content + code)
             
             return {
                 "ok": True,
                 "data": {
-                    "file": filename,
-                    "bytes_written": bytes_written
+                    "filename": filename,
+                    "code_length": len(code),
+                    "file_size": file_path.stat().st_size,
+                    "assignment_style": "using = instead of <-"
                 }
             }
         except Exception as e:
@@ -492,12 +565,12 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "APPEND_ERROR",
-                    "message": f"Failed to append to file: {str(e)}"
+                    "message": f"Failed to append code: {str(e)}"
                 }
             }
     
-    async def handle_write_r_code(self, code: str, filename: str = None, overwrite: bool = False, use_scaffold_header: bool = True) -> Dict[str, Any]:
-        """Write code to an R file"""
+    async def handle_write_r_code(self, code: str, filename: Optional[str] = None, overwrite: bool = False, use_scaffold_header: bool = True) -> Dict[str, Any]:
+        """Write R code to file"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
@@ -505,16 +578,21 @@ class MCPRServer:
         if filename is None:
             filename = self.primary_file
         
-        if not filename.endswith('.r'):
-            filename = filename + '.r'
+        # Ensure .R extension
+        if not filename.endswith('.R'):
+            if filename.endswith('.r'):
+                filename = filename[:-2] + '.R'
+            else:
+                filename = filename + '.R'
         
         file_path = self.workdir / filename
+        
         if not self.is_safe_path(file_path):
             return {
                 "ok": False,
                 "error": {
                     "code": "UNSAFE_PATH",
-                    "message": "File path escapes working directory"
+                    "message": f"File path {filename} is outside working directory"
                 }
             }
         
@@ -524,25 +602,39 @@ class MCPRServer:
                 "error": {
                     "code": "FILE_EXISTS",
                     "message": f"File {filename} already exists",
-                    "hints": ["Set overwrite=true to replace it", "Use append_r_code to add to existing file"]
+                    "hints": ["Set overwrite=true to replace the file", "Use append_r_code to add to existing file"]
                 }
             }
         
         try:
-            if use_scaffold_header and code:
-                # Add scaffold header before code
-                content = R_SCAFFOLD + "\n\n" + code
+            # Ensure code uses = instead of <- for assignments
+            if "<-" in code:
+                code = code.replace("<-", "=")
+            
+            # Prepare content
+            if use_scaffold_header and not code.startswith("#"):
+                content = R_SCAFFOLD + "\n" + code
             else:
                 content = code
             
-            bytes_written = len(content.encode('utf-8'))
             file_path.write_text(content)
+            
+            # Update state
+            state = self.load_state()
+            if 'r_files' not in state:
+                state['r_files'] = []
+            if filename not in state['r_files']:
+                state['r_files'].append(filename)
+            state['updated_at'] = datetime.now().isoformat()
+            self.save_state(state)
             
             return {
                 "ok": True,
                 "data": {
-                    "file": filename,
-                    "bytes_written": bytes_written
+                    "filename": filename,
+                    "overwrite": overwrite,
+                    "scaffold_used": use_scaffold_header,
+                    "assignment_style": "using = instead of <-"
                 }
             }
         except Exception as e:
@@ -550,12 +642,12 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "WRITE_ERROR",
-                    "message": f"Failed to write file: {str(e)}"
+                    "message": f"Failed to write code: {str(e)}"
                 }
             }
     
-    async def handle_run_r_script(self, filename: str = None, args: List[str] = None, timeout_sec: int = 120, save_rdata: bool = True) -> Dict[str, Any]:
-        """Execute an R script"""
+    async def handle_run_r_script(self, filename: Optional[str] = None, args: Optional[List[str]] = None, timeout_sec: int = 120, save_rdata: bool = True) -> Dict[str, Any]:
+        """Execute R script file"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
@@ -563,16 +655,21 @@ class MCPRServer:
         if filename is None:
             filename = self.primary_file
         
-        if not filename.endswith('.r'):
-            filename = filename + '.r'
+        # Ensure .R extension
+        if not filename.endswith('.R'):
+            if filename.endswith('.r'):
+                filename = filename[:-2] + '.R'
+            else:
+                filename = filename + '.R'
         
         file_path = self.workdir / filename
+        
         if not self.is_safe_path(file_path):
             return {
                 "ok": False,
                 "error": {
                     "code": "UNSAFE_PATH",
-                    "message": "File path escapes working directory"
+                    "message": f"File path {filename} is outside working directory"
                 }
             }
         
@@ -581,74 +678,62 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "FILE_NOT_FOUND",
-                    "message": f"File {filename} does not exist"
+                    "message": f"Script file {filename} not found",
+                    "hints": ["Check the filename is correct", "Create the file first with create_r_file"]
                 }
             }
         
-        # Scan files before execution
+        # Build R command
+        rscript_args = []
+        if save_rdata:
+            rscript_args = ["-e", f"source('{filename}'); save.image('.RData')"]
+        else:
+            rscript_args = [filename]
+        
+        if args:
+            rscript_args.extend(args)
+        
+        # Get files before execution
         files_before = self.scan_directory_files()
         
-        # Prepare R command
-        if args is None:
-            args = []
-        
-        if save_rdata:
-            # Wrap execution to save workspace
-            r_code = f'source("{filename}"); save.image(".mcpr/last_session.RData")'
-            cmd_args = ["-e", r_code] + args
-        else:
-            cmd_args = [str(file_path)] + args
-        
         # Execute
-        result = self.run_r_command(cmd_args, timeout_sec)
+        result = self.run_r_command(rscript_args, timeout_sec)
         
-        if result.get("ok"):
-            # Scan files after execution
-            files_after = self.scan_directory_files()
-            new_or_modified = []
-            for name, mtime in files_after.items():
-                if name not in files_before or files_before[name] < mtime:
-                    new_or_modified.append(name)
-            
-            # Update state
-            state = self.load_state()
-            state["last_run"] = datetime.now().isoformat()
-            state["exports_manifest"] = files_after
-            self.save_state(state)
-            
-            return {
-                "ok": True,
-                "data": {
-                    "exit_code": result["exit_code"],
-                    "stdout": result["stdout"],
-                    "stderr": result["stderr"],
-                    "duration_ms": result["duration_ms"],
-                    "new_or_modified_files": new_or_modified
-                }
+        # Get files after execution
+        files_after = self.scan_directory_files()
+        
+        # Find new/modified files
+        new_files = []
+        modified_files = []
+        for name, mtime in files_after.items():
+            if name not in files_before:
+                new_files.append(name)
+            elif mtime > files_before[name]:
+                modified_files.append(name)
+        
+        if result['ok']:
+            result['data'] = {
+                'script': filename,
+                'new_files': new_files,
+                'modified_files': modified_files,
+                'rdata_saved': save_rdata and '.RData' in (new_files + modified_files)
             }
-        else:
-            return result
+        
+        return result
     
     async def handle_run_r_expression(self, expr: str, timeout_sec: int = 60) -> Dict[str, Any]:
-        """Execute an R expression"""
+        """Execute single R expression"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
         
+        # Execute expression
         result = self.run_r_command(["-e", expr], timeout_sec)
         
-        if result.get("ok"):
-            return {
-                "ok": True,
-                "data": {
-                    "exit_code": result["exit_code"],
-                    "stdout": result["stdout"],
-                    "stderr": result["stderr"],
-                    "duration_ms": result["duration_ms"]
-                }
-            }
-        else:
-            return result
+        if result['ok']:
+            result['data'] = {'expression': expr[:100] + '...' if len(expr) > 100 else expr}
+        
+        return result
     
     async def handle_list_exports(self, glob: str = "*", sort_by: str = "mtime", descending: bool = True, limit: int = 200) -> Dict[str, Any]:
         """List files in working directory"""
@@ -660,28 +745,21 @@ class MCPRServer:
             files = []
             for item in self.workdir.glob(glob):
                 if item.is_file():
-                    # Skip .mcpr unless explicitly requested
-                    if item.name.startswith('.mcpr') and '.mcpr' not in glob:
-                        continue
-                    
                     stat = item.stat()
-                    # Guess if text file
-                    is_text_guess = item.suffix in ['.r', '.R', '.txt', '.csv', '.tsv', '.json', '.xml', '.html', '.md']
-                    
                     files.append({
                         "name": item.name,
                         "size": stat.st_size,
-                        "mtime": stat.st_mtime,
-                        "is_text_guess": is_text_guess
+                        "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        "is_r_file": item.suffix.lower() == '.r'
                     })
             
             # Sort
-            if sort_by == "mtime":
-                files.sort(key=lambda x: x["mtime"], reverse=descending)
+            if sort_by == "name":
+                files.sort(key=lambda x: x["name"], reverse=descending)
             elif sort_by == "size":
                 files.sort(key=lambda x: x["size"], reverse=descending)
-            elif sort_by == "name":
-                files.sort(key=lambda x: x["name"], reverse=not descending)
+            else:  # mtime
+                files.sort(key=lambda x: x["mtime"], reverse=descending)
             
             # Limit
             files = files[:limit]
@@ -689,7 +767,8 @@ class MCPRServer:
             return {
                 "ok": True,
                 "data": {
-                    "files": files
+                    "files": files,
+                    "total": len(files)
                 }
             }
         except Exception as e:
@@ -702,18 +781,19 @@ class MCPRServer:
             }
     
     async def handle_read_export(self, name: str, max_bytes: int = 2000000, as_text: bool = True, encoding: str = "utf-8") -> Dict[str, Any]:
-        """Read a file from working directory"""
+        """Read file from working directory"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
         
         file_path = self.workdir / name
+        
         if not self.is_safe_path(file_path):
             return {
                 "ok": False,
                 "error": {
                     "code": "UNSAFE_PATH",
-                    "message": "File path escapes working directory"
+                    "message": f"File path {name} is outside working directory"
                 }
             }
         
@@ -722,46 +802,62 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "FILE_NOT_FOUND",
-                    "message": f"File {name} does not exist"
+                    "message": f"File {name} not found"
+                }
+            }
+        
+        if not file_path.is_file():
+            return {
+                "ok": False,
+                "error": {
+                    "code": "NOT_A_FILE",
+                    "message": f"{name} is not a file"
                 }
             }
         
         try:
-            file_size = file_path.stat().st_size
-            truncated = file_size > max_bytes
+            size = file_path.stat().st_size
             
-            with open(file_path, 'rb') as f:
-                data = f.read(max_bytes)
+            if size > max_bytes:
+                return {
+                    "ok": False,
+                    "error": {
+                        "code": "FILE_TOO_LARGE",
+                        "message": f"File size {size} exceeds max_bytes {max_bytes}",
+                        "hints": ["Increase max_bytes parameter", "Use preview_table for CSV files"]
+                    }
+                }
             
             if as_text:
-                try:
-                    text = data.decode(encoding, errors='replace')
-                    return {
-                        "ok": True,
-                        "data": {
-                            "name": name,
-                            "text": text,
-                            "truncated": truncated
-                        }
-                    }
-                except Exception as e:
-                    return {
-                        "ok": False,
-                        "error": {
-                            "code": "DECODE_ERROR",
-                            "message": f"Failed to decode file as {encoding}: {str(e)}"
-                        }
-                    }
-            else:
-                data_b64 = base64.b64encode(data).decode('ascii')
+                content = file_path.read_text(encoding=encoding)
                 return {
                     "ok": True,
                     "data": {
                         "name": name,
-                        "data_b64": data_b64,
-                        "truncated": truncated
+                        "content": content,
+                        "size": size
                     }
                 }
+            else:
+                content = file_path.read_bytes()
+                content_b64 = base64.b64encode(content).decode('ascii')
+                return {
+                    "ok": True,
+                    "data": {
+                        "name": name,
+                        "content_base64": content_b64,
+                        "size": size
+                    }
+                }
+        except UnicodeDecodeError as e:
+            return {
+                "ok": False,
+                "error": {
+                    "code": "DECODE_ERROR",
+                    "message": f"Failed to decode file as {encoding}",
+                    "hints": ["Try as_text=false for binary files", "Use a different encoding"]
+                }
+            }
         except Exception as e:
             return {
                 "ok": False,
@@ -778,12 +874,13 @@ class MCPRServer:
             return {"ok": False, "error": error}
         
         file_path = self.workdir / name
+        
         if not self.is_safe_path(file_path):
             return {
                 "ok": False,
                 "error": {
                     "code": "UNSAFE_PATH",
-                    "message": "File path escapes working directory"
+                    "message": f"File path {name} is outside working directory"
                 }
             }
         
@@ -792,34 +889,44 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "FILE_NOT_FOUND",
-                    "message": f"File {name} does not exist"
+                    "message": f"File {name} not found"
                 }
             }
         
         try:
             rows = []
-            header = None
+            total_rows = 0
             
-            # Auto-detect delimiter for TSV
-            if name.endswith('.tsv'):
-                delimiter = '\t'
-            
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            with open(file_path, 'r', newline='', encoding='utf-8') as f:
                 reader = csv.reader(f, delimiter=delimiter)
                 for i, row in enumerate(reader):
-                    if i == 0:
-                        header = row
-                    elif i <= max_rows:
+                    if i <= max_rows:  # Include header + max_rows
                         rows.append(row)
-                    else:
-                        break
+                    total_rows += 1
+            
+            if not rows:
+                return {
+                    "ok": True,
+                    "data": {
+                        "name": name,
+                        "rows": [],
+                        "total_rows": 0,
+                        "columns": []
+                    }
+                }
+            
+            # Extract header and data
+            header = rows[0] if rows else []
+            data = rows[1:max_rows+1] if len(rows) > 1 else []
             
             return {
                 "ok": True,
                 "data": {
-                    "header": header or [],
-                    "rows": rows,
-                    "row_count_returned": len(rows)
+                    "name": name,
+                    "columns": header,
+                    "rows": data,
+                    "total_rows": total_rows,
+                    "truncated": total_rows > max_rows + 1
                 }
             }
         except Exception as e:
@@ -827,89 +934,275 @@ class MCPRServer:
                 "ok": False,
                 "error": {
                     "code": "PREVIEW_ERROR",
-                    "message": f"Failed to preview table: {str(e)}"
+                    "message": f"Failed to preview table: {str(e)}",
+                    "hints": ["Check the delimiter is correct", "Ensure file is a valid CSV/TSV"]
                 }
             }
     
-    async def handle_inspect_r_objects(self, objects: List[str] = None, str_max_level: int = 1, timeout_sec: int = 60) -> Dict[str, Any]:
-        """Inspect R objects from last session"""
+
+    async def handle_ggplot_style_check(self, code: str) -> Dict[str, Any]:
+        """Check and optimize ggplot code against publication-quality style guide"""
         ok, error = self.ensure_workdir_set()
         if not ok:
             return {"ok": False, "error": error}
         
-        rdata_file = self.state_dir / "last_session.RData"
-        if not rdata_file.exists():
+        if not code:
             return {
                 "ok": False,
                 "error": {
-                    "code": "NO_SESSION",
-                    "message": "No saved R session found",
-                    "hints": ["Run an R script with save_rdata=True first"]
+                    "code": "NO_CODE",
+                    "message": "No code provided to check",
+                    "hints": ["Provide ggplot code to analyze and optimize"]
                 }
             }
         
-        if objects is None:
-            objects = []
+        import re
         
-        # Build R code to inspect objects
-        r_code = f'load(".mcpr/last_session.RData", .GlobalEnv); '
+        feedback = []
+        optimized_code = code
         
-        if not objects:
-            # List all objects
-            r_code += 'cat(ls(), sep="\\n")'
-        else:
-            # Inspect specified objects
-            inspections = []
-            for obj in objects:
-                safe_obj = obj.replace('"', '\\"')
-                inspections.append(f'if(exists("{safe_obj}")) {{ cat("\\n### {safe_obj} ###\\n"); str(get("{safe_obj}"), max.level={str_max_level}) }} else {{ cat("\\n### {safe_obj} ###\\n[Object not found]\\n") }}')
-            r_code += '; '.join(inspections)
+        # 1. Convert all <- to = for assignments
+        if "<-" in optimized_code:
+            optimized_code = optimized_code.replace("<-", "=")
+            feedback.append("✅ Converted <- to = for all variable assignments")
         
-        result = self.run_r_command(["-e", r_code], timeout_sec)
-        
-        if result.get("ok"):
-            stdout = result["stdout"]
-            
-            if not objects:
-                # Parse listed objects
-                listed = [line.strip() for line in stdout.split('\n') if line.strip()]
-                return {
-                    "ok": True,
-                    "data": {
-                        "listed": listed,
-                        "inspected": {}
-                    }
-                }
+        # 2. Check and optimize theme
+        if "theme_gray()" in optimized_code or "theme_grey()" in optimized_code:
+            optimized_code = re.sub(r'theme_gr[ae]y\([^)]*\)', 'theme_minimal(base_size=14)', optimized_code)
+            feedback.append("✅ Replaced theme_gray() with theme_minimal(base_size=14)")
+        elif "theme_minimal(" not in optimized_code and "theme_classic(" not in optimized_code:
+            # Add theme if missing
+            if "+ theme(" in optimized_code:
+                optimized_code = optimized_code.replace("+ theme(", "+ theme_minimal(base_size=14) + theme(")
             else:
-                # Parse inspected objects
-                inspected = {}
-                current_obj = None
-                current_lines = []
+                # Add before ggsave if present, otherwise at the end
+                if "ggsave(" in optimized_code:
+                    optimized_code = optimized_code.replace("ggsave(", "+ theme_minimal(base_size=14)\nggsave(")
+                else:
+                    optimized_code += "\n  + theme_minimal(base_size=14)"
+            feedback.append("✅ Added theme_minimal(base_size=14) for clean appearance")
+        
+        # 3. Ensure proper base_size
+        if "base_size" in optimized_code:
+            size_matches = re.findall(r'base_size\s*=\s*(\d+)', optimized_code)
+            for match in size_matches:
+                if int(match) < 14:
+                    optimized_code = re.sub(f'base_size\\s*=\\s*{match}', 'base_size=14', optimized_code)
+                    feedback.append(f"✅ Increased base_size from {match} to 14")
+        
+        # 4. Check and add color palettes
+        has_color_scale = any(x in optimized_code for x in ["scale_color", "scale_fill", "scale_colour"])
+        
+        if not has_color_scale and any(x in optimized_code for x in ["aes(", "color=", "fill=", "colour="]):
+            # Detect if categorical or continuous
+            if any(x in optimized_code for x in ["factor(", "as.factor(", 'color="', 'fill="']):
+                # Categorical data - use muted palette
+                if "scale_color" in optimized_code or "colour=" in optimized_code:
+                    optimized_code += "\n  + scale_color_brewer(palette='Set2')"
+                    feedback.append("✅ Added muted categorical color palette (Set2)")
+                if "fill=" in optimized_code:
+                    optimized_code += "\n  + scale_fill_brewer(palette='Set2')"
+                    feedback.append("✅ Added muted categorical fill palette (Set2)")
+            else:
+                # Continuous data - use viridis
+                if "color=" in optimized_code or "colour=" in optimized_code:
+                    optimized_code += "\n  + scale_color_viridis_c(option='viridis')"
+                    feedback.append("✅ Added viridis continuous color scale")
+                if "fill=" in optimized_code:
+                    optimized_code += "\n  + scale_fill_viridis_c(option='viridis')"
+                    feedback.append("✅ Added viridis continuous fill scale")
+        elif has_color_scale:
+            # Replace default color scales with better ones
+            if "scale_color_discrete()" in optimized_code or "scale_colour_discrete()" in optimized_code:
+                optimized_code = re.sub(r'scale_colou?r_discrete\(\)', "scale_color_brewer(palette='Set2')", optimized_code)
+                feedback.append("✅ Replaced default discrete colors with Set2 palette")
+            if "scale_fill_discrete()" in optimized_code:
+                optimized_code = optimized_code.replace("scale_fill_discrete()", "scale_fill_brewer(palette='Set2')")
+                feedback.append("✅ Replaced default discrete fill with Set2 palette")
+            if "scale_color_continuous()" in optimized_code or "scale_colour_continuous()" in optimized_code:
+                optimized_code = re.sub(r'scale_colou?r_continuous\(\)', "scale_color_viridis_c()", optimized_code)
+                feedback.append("✅ Replaced default continuous colors with viridis")
+            if "scale_fill_continuous()" in optimized_code:
+                optimized_code = optimized_code.replace("scale_fill_continuous()", "scale_fill_viridis_c()")
+                feedback.append("✅ Replaced default continuous fill with viridis")
+        
+        # 5. Optimize geom sizes
+        if "geom_point(" in optimized_code:
+            # Check if size is specified
+            point_matches = re.findall(r'geom_point\([^)]*\)', optimized_code)
+            for match in point_matches:
+                if "size" not in match:
+                    new_match = match.replace("geom_point()", "geom_point(size=2.5, alpha=0.8)")
+                    if match == "geom_point()":
+                        optimized_code = optimized_code.replace(match, new_match)
+                    else:
+                        # Insert size parameter
+                        new_match = match[:-1] + ", size=2.5, alpha=0.8)"
+                        optimized_code = optimized_code.replace(match, new_match)
+                    feedback.append("✅ Added size=2.5 and alpha=0.8 to geom_point")
+        
+        if "geom_line(" in optimized_code:
+            line_matches = re.findall(r'geom_line\([^)]*\)', optimized_code)
+            for match in line_matches:
+                if "linewidth" not in match and "size" not in match:
+                    if match == "geom_line()":
+                        optimized_code = optimized_code.replace(match, "geom_line(linewidth=0.8)")
+                    else:
+                        new_match = match[:-1] + ", linewidth=0.8)"
+                        optimized_code = optimized_code.replace(match, new_match)
+                    feedback.append("✅ Added linewidth=0.8 to geom_line")
+        
+        # 6. Check for text/label overlaps and suggest ggrepel
+        if "geom_text(" in optimized_code and "geom_text_repel" not in optimized_code:
+            feedback.append("⚠️ Consider using ggrepel::geom_text_repel() to avoid label overlaps")
+        
+        # 7. Humanize variable names in labels
+        variable_fixes = {
+            "Sepal.Length": "Sepal Length",
+            "Sepal.Width": "Sepal Width", 
+            "Petal.Length": "Petal Length",
+            "Petal.Width": "Petal Width",
+            ".": " "  # General dot replacement in quoted strings
+        }
+        
+        for old, new in variable_fixes.items():
+            if old in optimized_code:
+                # Only replace in quoted strings (labels)
+                optimized_code = re.sub(f'"{old}"', f'"{new}"', optimized_code)
+                optimized_code = re.sub(f"'{old}'", f"'{new}'", optimized_code)
+                if old != ".":
+                    feedback.append(f"✅ Humanized label: {old} → {new}")
+        
+        # 8. Optimize ggsave dimensions
+        if "ggsave(" in optimized_code:
+            ggsave_matches = re.findall(r'ggsave\([^)]+\)', optimized_code)
+            for match in ggsave_matches:
+                new_match = match
                 
-                for line in stdout.split('\n'):
-                    if line.startswith('### ') and line.endswith(' ###'):
-                        if current_obj:
-                            inspected[current_obj] = '\n'.join(current_lines)
-                        current_obj = line[4:-4]
-                        current_lines = []
-                    elif current_obj:
-                        current_lines.append(line)
+                # Check and adjust width
+                width_match = re.search(r'width\s*=\s*([\d.]+)', match)
+                if width_match and float(width_match.group(1)) > 6:
+                    new_match = re.sub(r'width\s*=\s*[\d.]+', 'width=5', new_match)
+                    feedback.append(f"✅ Reduced width from {width_match.group(1)} to 5 inches")
+                elif "width" not in match:
+                    new_match = new_match[:-1] + ", width=5, height=4)"
+                    feedback.append("✅ Added optimal dimensions: width=5, height=4")
                 
-                if current_obj:
-                    inspected[current_obj] = '\n'.join(current_lines)
+                # Check and adjust height
+                height_match = re.search(r'height\s*=\s*([\d.]+)', match)
+                if height_match and float(height_match.group(1)) > 4.5:
+                    new_match = re.sub(r'height\s*=\s*[\d.]+', 'height=4', new_match)
+                    feedback.append(f"✅ Reduced height from {height_match.group(1)} to 4 inches")
                 
-                return {
-                    "ok": True,
-                    "data": {
-                        "listed": [],
-                        "inspected": inspected
-                    }
-                }
+                # Ensure dpi=800
+                if "dpi" not in match:
+                    new_match = new_match[:-1] + ", dpi=800)"
+                    feedback.append("✅ Added dpi=800 for publication quality")
+                else:
+                    dpi_match = re.search(r'dpi\s*=\s*(\d+)', match)
+                    if dpi_match and int(dpi_match.group(1)) < 800:
+                        new_match = re.sub(r'dpi\s*=\s*\d+', 'dpi=800', new_match)
+                        feedback.append(f"✅ Increased dpi from {dpi_match.group(1)} to 800")
+                
+                optimized_code = optimized_code.replace(match, new_match)
         else:
-            return result
+            # Add ggsave recommendation
+            feedback.append("💡 Add ggsave('plot.png', p, width=5, height=4, dpi=800) to save")
+        
+        # 9. Add margin adjustments if not present
+        if "plot.margin" not in optimized_code and "theme(" in optimized_code:
+            optimized_code = optimized_code.replace("theme(", "theme(plot.margin=margin(10,10,10,10), ")
+            feedback.append("✅ Added plot margins for better spacing")
+        
+        # Color palette recommendations
+        color_recommendations = {
+            "categorical": ["Set2", "Set3", "Pastel1", "Pastel2", "Dark2"],
+            "continuous": ["viridis", "magma", "plasma", "inferno", "cividis"],
+            "diverging": ["RdBu", "RdYlBu", "Spectral", "PuOr", "BrBG"]
+        }
+        
+        return {
+            "ok": True,
+            "data": {
+                "optimized_code": optimized_code if optimized_code != code else None,
+                "feedback": feedback if feedback else ["Code already follows style guidelines"],
+                "improvements_made": len(feedback),
+                "style_summary": {
+                    "assignment": "Use = instead of <-",
+                    "theme": "theme_minimal() or theme_classic() with base_size=14",
+                    "dimensions": "width=5, height=4 for optimal readability",
+                    "colors": "Set2 for categorical, viridis for continuous",
+                    "typography": "base_size=14, automatic scaling for titles",
+                    "export": "Always use dpi=800"
+                },
+                "color_palettes": color_recommendations,
+                "final_checklist": [
+                    "✓ Assignment operators: = not <-",
+                    "✓ Theme: minimal or classic, not gray",
+                    "✓ Colors: muted palettes, not defaults", 
+                    "✓ Dimensions: 5x4 inches optimal",
+                    "✓ Font size: base_size ≥ 14",
+                    "✓ Export: dpi=800 for publication"
+                ]
+            }
+        }
+    
+    async def handle_inspect_r_objects(self, objects: Optional[List[str]] = None, str_max_level: int = 1, timeout_sec: int = 60) -> Dict[str, Any]:
+        """Inspect R objects from saved session"""
+        ok, error = self.ensure_workdir_set()
+        if not ok:
+            return {"ok": False, "error": error}
+        
+        rdata_path = self.workdir / ".RData"
+        if not rdata_path.exists():
+            return {
+                "ok": False,
+                "error": {
+                    "code": "NO_RDATA",
+                    "message": "No .RData file found",
+                    "hints": ["Run an R script with save_rdata=true first", "Check if .RData was created in the working directory"]
+                }
+            }
+        
+        # Build R expression
+        if objects:
+            obj_list = ', '.join(f'"{obj}"' for obj in objects)
+            expr = f"""
+            load('.RData')
+            objs = list({obj_list})
+            for(name in objs){{
+                if(exists(name)){{
+                    cat('\\n==', name, '==\\n')
+                    str(get(name), max.level={str_max_level})
+                }}else{{
+                    cat('\\n==', name, '== [NOT FOUND]\\n')
+                }}
+            }}
+            """
+        else:
+            expr = f"""
+            load('.RData')
+            cat('\\nObjects in workspace:\\n')
+            print(ls())
+            cat('\\n\\nStructure of objects:\\n')
+            for(name in ls()){{
+                cat('\\n==', name, '==\\n')
+                str(get(name), max.level={str_max_level})
+            }}
+            """
+        
+        result = self.run_r_command(["-e", expr], timeout_sec)
+        
+        if result['ok']:
+            result['data'] = {
+                'objects_requested': objects,
+                'str_max_level': str_max_level
+            }
+        
+        return result
     
     async def handle_which_r(self) -> Dict[str, Any]:
-        """Find R executable in PATH"""
+        """Find R executable"""
         alternatives = []
         executable = None
         
@@ -950,13 +1243,11 @@ class MCPRServer:
         
         try:
             r_files = []
-            for item in self.workdir.glob("*.r"):
-                if item.is_file():
-                    r_files.append(item.name)
-            
-            for item in self.workdir.glob("*.R"):
-                if item.is_file() and item.name not in r_files:
-                    r_files.append(item.name)
+            # Look for both .R and .r extensions
+            for pattern in ["*.R", "*.r"]:
+                for item in self.workdir.glob(pattern):
+                    if item.is_file() and item.name not in r_files:
+                        r_files.append(item.name)
             
             r_files.sort()
             
@@ -1013,6 +1304,8 @@ async def main():
                  inputSchema={"type": "object", "properties": {"name": {"type": "string"}, "max_bytes": {"type": "integer", "default": 2000000}, "as_text": {"type": "boolean", "default": True}, "encoding": {"type": "string", "default": "utf-8"}}, "required": ["name"]}),
             Tool(name="preview_table", description="Preview a CSV/TSV file as a table", 
                  inputSchema={"type": "object", "properties": {"name": {"type": "string"}, "delimiter": {"type": "string", "default": ","}, "max_rows": {"type": "integer", "default": 50}}, "required": ["name"]}),
+            Tool(name="ggplot_style_check", description="Analyze and optimize ggplot code for publication-quality styling", 
+                 inputSchema={"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]}),
             Tool(name="inspect_r_objects", description="Inspect R objects from the last saved session", 
                  inputSchema={"type": "object", "properties": {"objects": {"type": "array", "items": {"type": "string"}}, "str_max_level": {"type": "integer", "default": 1}, "timeout_sec": {"type": "integer", "default": 60}}}),
             Tool(name="which_r", description="Find R executable in PATH", 
@@ -1050,6 +1343,8 @@ async def main():
                 result = await mcpr.handle_read_export(**arguments)
             elif name == "preview_table":
                 result = await mcpr.handle_preview_table(**arguments)
+            elif name == "ggplot_style_check":
+                result = await mcpr.handle_ggplot_style_check(**arguments)
             elif name == "inspect_r_objects":
                 result = await mcpr.handle_inspect_r_objects(**arguments)
             elif name == "which_r":
