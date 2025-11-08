@@ -5,7 +5,7 @@
   "description": "MCP-compliant R code execution and management agent for Claude Desktop",
   "long_description": "MCPR empowers R programming with Model Context Protocol. It allows Claude to generate, execute, and manage R scripts within a user-specified directory. It provides a complete workflow for statistical programming and data analysis through natural language interaction, including script management, workspace persistence, object inspection, and publication-quality ggplot2 visualization.",
   "author": {
-    "name": "Wanjun Gu <wanjun.gu@ucsf.edu>",
+    "name": "Wanjun Gu",
     "email": "wanjun.gu@ucsf.edu"
   },
   "icon": "logo.png",
