@@ -1,10 +1,11 @@
 {
-  "dxt_version": "0.1",
+  "manifest_version": "0.2",
   "name": "mcpr",
   "version": "1.0.0",
-  "description": "MCP-compliant R code execution and management agent for Cloud Desktop Extension",
+  "description": "MCP-compliant R code execution and management agent for Claude Desktop",
+  "long_description": "MCPR empowers R programming with Model Context Protocol. It allows Claude to generate, execute, and manage R scripts within a user-specified directory. It provides a complete workflow for statistical programming and data analysis through natural language interaction, including script management, workspace persistence, object inspection, and publication-quality ggplot2 visualization.",
   "author": {
-    "name": "Wanjun Gu",
+    "name": "Wanjun Gu <wanjun.gu@ucsf.edu>",
     "email": "wanjun.gu@ucsf.edu"
   },
   "icon": "logo.png",
@@ -12,14 +13,95 @@
     "type": "python",
     "entry_point": "server/main.py",
     "mcp_config": {
-      "command": "uv",
+      "command": "${__dirname}/.venv/bin/python",
       "args": [
-        "run",
-        "--with", "mcp>=1.0.0",
         "${__dirname}/server/main.py"
       ],
       "env": {
       }
+    }
+  },
+  "tools": [
+    {
+      "name": "set_workdir",
+      "description": "Set the working directory for all R operations"
+    },
+    {
+      "name": "get_state",
+      "description": "Get current mcpr state and configuration"
+    },
+    {
+      "name": "create_r_file",
+      "description": "Create a new R script file"
+    },
+    {
+      "name": "rename_r_file",
+      "description": "Rename an R script file"
+    },
+    {
+      "name": "set_primary_file",
+      "description": "Set the primary R script file"
+    },
+    {
+      "name": "append_r_code",
+      "description": "Append R code to an existing script file"
+    },
+    {
+      "name": "write_r_code",
+      "description": "Write R code to a script file"
+    },
+    {
+      "name": "run_r_script",
+      "description": "Execute an R script file"
+    },
+    {
+      "name": "run_r_expression",
+      "description": "Execute a single R expression"
+    },
+    {
+      "name": "list_exports",
+      "description": "List files in the working directory"
+    },
+    {
+      "name": "read_export",
+      "description": "Read a file from the working directory"
+    },
+    {
+      "name": "preview_table",
+      "description": "Preview a CSV/TSV file as a table"
+    },
+    {
+      "name": "ggplot_style_check",
+      "description": "Analyze and optimize ggplot code for publication-quality styling"
+    },
+    {
+      "name": "inspect_r_objects",
+      "description": "Inspect R objects from the last saved session"
+    },
+    {
+      "name": "which_r",
+      "description": "Find R executable in PATH"
+    },
+    {
+      "name": "list_r_files",
+      "description": "List all R script files in the working directory"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "Generate ggplot",
+      "description": "This prompt will help the user make ggplot figures based on the mtcars dataset.",
+      "text": "Make figures using ggplot using mtcars dataset on ~/Desktop in a file called `make_plot`"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
     }
   },
   "keywords": [
