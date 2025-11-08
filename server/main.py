@@ -780,7 +780,7 @@ class MCPRServer:
                 }
             }
     
-    async def handle_read_export(self, name: str, max_bytes: int = 2000000, as_text: bool = True, encoding: str = "utf-8") -> Dict[str, Any]:
+    async def handle_read_export(self, name: str, max_bytes: int = 50000, as_text: bool = True, encoding: str = "utf-8") -> Dict[str, Any]:
         """Read file from working directory"""
         ok, error = self.ensure_workdir_set()
         if not ok:
@@ -1301,7 +1301,7 @@ async def main():
             Tool(name="list_exports", description="List files in the working directory", 
                  inputSchema={"type": "object", "properties": {"glob": {"type": "string", "default": "*"}, "sort_by": {"type": "string", "default": "mtime"}, "descending": {"type": "boolean", "default": True}, "limit": {"type": "integer", "default": 200}}}),
             Tool(name="read_export", description="Read a file from the working directory", 
-                 inputSchema={"type": "object", "properties": {"name": {"type": "string"}, "max_bytes": {"type": "integer", "default": 2000000}, "as_text": {"type": "boolean", "default": True}, "encoding": {"type": "string", "default": "utf-8"}}, "required": ["name"]}),
+                 inputSchema={"type": "object", "properties": {"name": {"type": "string"}, "max_bytes": {"type": "integer", "default": 50000}, "as_text": {"type": "boolean", "default": True}, "encoding": {"type": "string", "default": "utf-8"}}, "required": ["name"]}),
             Tool(name="preview_table", description="Preview a CSV/TSV file as a table", 
                  inputSchema={"type": "object", "properties": {"name": {"type": "string"}, "delimiter": {"type": "string", "default": ","}, "max_rows": {"type": "integer", "default": 50}}, "required": ["name"]}),
             Tool(name="ggplot_style_check", description="Analyze and optimize ggplot code for publication-quality styling", 
