@@ -1,4 +1,4 @@
-#!/Users/wanjun/Desktop/mcpr/.venv/bin/python3.14
+#!/Users/wanjun/Desktop/mcpr/venv/bin/python3.12
 import sys
 from dotenv.__main__ import cli
 if __name__ == '__main__':
