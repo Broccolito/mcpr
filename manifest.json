@@ -13,7 +13,7 @@
     "type": "python",
     "entry_point": "server/main.py",
     "mcp_config": {
-      "command": "${__dirname}/.venv/bin/python",
+      "command": "${__dirname}/.python/bin/python3.12",
       "args": [
         "${__dirname}/server/main.py"
       ],
