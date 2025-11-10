@@ -1,4 +1,5 @@
 assets/
+.python/
 auto_sync.sh
 auto_sync.bat
 
