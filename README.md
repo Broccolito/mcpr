@@ -1,5 +1,7 @@
 # mcpr <img src="logo.png" align="right" alt="MCPR Logo" width="100"/>
 
+This repositry is deprecated and is no longer maintained by developers any more. Please check out [TidyFlow](https://github.com/Broccolito/TidyFlow) as the successor tool.
+
 MCP-compliant R code execution and management agent for Claude Desktop Extension.
 
 <img src="assets/poster.png" alt="MCPR" width="300" style="display:inline;">
